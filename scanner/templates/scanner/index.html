@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MobilePhishGuard Web</title>
+<style>
+  :root { --bg:#f4f6fb; --card:#fff; --text:#1c2333; --muted:#6b7280; --brand:#2563eb;
+          --ok:#16a34a; --warn:#d97706; --bad:#dc2626; --line:#e5e7eb; --page:#cfd6e4; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f1420; --card:#1a2133; --text:#e8ecf5; --muted:#98a2b8; --line:#2a3350; --page:#05070d; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); }
+
+  /* Khung điện thoại: trên máy tính tự giả lập màn hình di động */
+  .phone { width:100%; max-width:450px; margin:0 auto; }
+  @media (min-width:600px) {
+    body { background:var(--page); display:flex; justify-content:center; align-items:center; min-height:100vh; }
+    .phone { width:400px; height:min(860px,94vh); border:10px solid #1b1b1f; border-radius:46px;
+             overflow-y:auto; background:var(--bg); box-shadow:0 25px 70px rgba(0,0,0,.45); }
+    .phone::-webkit-scrollbar { display:none; }
+    .phone { scrollbar-width:none; }
+  }
+  .wrap { padding:16px; }
+  h1 { font-size:1.3rem; margin:8px 0 2px; } .sub { color:var(--muted); font-size:.85rem; margin-bottom:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:14px; }
+  .tabs { display:flex; gap:8px; margin-bottom:12px; }
+  .tab { flex:1; padding:10px; border:1px solid var(--line); background:transparent; color:var(--text); border-radius:10px; font-size:.95rem; }
+  .tab.active { background:var(--brand); color:#fff; border-color:var(--brand); }
+  input[type=text] { width:100%; padding:14px; font-size:1rem; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--text); }
+  input[type=file] { width:100%; color:var(--text); }
+  .btn { width:100%; margin-top:10px; padding:14px; border:0; border-radius:10px; background:var(--brand); color:#fff; font-size:1rem; font-weight:600; }
+  .btn:disabled { opacity:.6; }
+  .hidden { display:none; }
+
+  .banner { border-radius:14px; padding:18px; color:#fff; text-align:center; }
+  .banner.safe { background:var(--ok); } .banner.suspicious { background:var(--warn); }
+  .banner.phishing { background:var(--bad); animation:pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.6)} 50%{box-shadow:0 0 0 14px rgba(220,38,38,0)} }
+  .banner .big { font-size:1.3rem; font-weight:700; }
+  .risk-label { margin-top:10px; font-size:.85rem; opacity:.9; }
+  .risk-pct { font-size:2.2rem; font-weight:800; line-height:1.1; }
+  .bar { height:8px; border-radius:99px; background:rgba(255,255,255,.35); margin:10px 0 8px; overflow:hidden; }
+  .bar > i { display:block; height:100%; background:#fff; border-radius:99px; transition:width .6s; }
+  .risk-sub { font-size:.8rem; opacity:.95; }
+
+  .dl-row { display:flex; justify-content:space-between; font-size:.9rem; margin-bottom:6px; }
+  .dl-bar { height:8px; border-radius:99px; background:var(--line); overflow:hidden; }
+  .dl-bar > i { display:block; height:100%; width:0; border-radius:99px; transition:width .6s; }
+  .engine { margin-top:10px; padding-top:10px; border-top:1px solid var(--line); font-size:.78rem; color:var(--muted); text-align:center; }
+
+  table { width:100%; border-collapse:collapse; font-size:.85rem; }
+  td { padding:8px 4px; border-bottom:1px solid var(--line); vertical-align:top; }
+  tr:last-child td { border:0; } td:first-child { color:var(--muted); width:42%; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; }
+  .dot.ok { background:var(--ok); } .dot.warn { background:var(--warn); } .dot.bad { background:var(--bad); } .dot.info { background:#94a3b8; }
+
+  .reason { display:flex; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); font-size:.9rem; }
+  .reason:last-child { border:0; } .pts { min-width:42px; font-weight:700; color:var(--bad); }
+  .url { word-break:break-all; font-size:.85rem; color:var(--muted); }
+  h3 { margin:0 0 8px; font-size:1rem; }
+  .err { color:var(--bad); font-size:.9rem; margin-top:8px; }
+</style>
+</head>
+<body>
+<div class="phone"><div class="wrap">
+  <h1>🛡️ MobilePhishGuard</h1>
+  <div class="sub">Quét &amp; cảnh báo URL lừa đảo – tối ưu cho di động</div>
+  {% csrf_token %}
+
+  <div class="card">
+    <div class="tabs">
+      <button class="tab active" id="tabUrl">🔗 Quét URL</button>
+      <button class="tab" id="tabQr">📷 Quét QR</button>
+    </div>
+    <div id="paneUrl">
+      <input type="text" id="urlInput" placeholder="Dán đường dẫn nghi ngờ (vd: bit.ly/abc)" autocomplete="off" inputmode="url">
+      <button class="btn" id="scanBtn">Kiểm tra ngay</button>
+    </div>
+    <div id="paneQr" class="hidden">
+      <input type="file" id="qrInput" accept="image/*" capture="environment">
+      <button class="btn" id="qrBtn">Phân tích mã QR</button>
+    </div>
+    <div class="err" id="err"></div>
+  </div>
+
+  <div id="result" class="hidden">
+    <div class="banner" id="banner">
+      <div class="big" id="verdictText"></div>
+      <div class="risk-label">Mức độ rủi ro</div>
+      <div class="risk-pct" id="riskPct"></div>
+      <div class="bar"><i id="riskBar"></i></div>
+      <div class="risk-sub" id="riskSub"></div>
+    </div>
+
+    <div class="card" id="dlCard" style="margin-top:14px">
+      <h3>🧠 Phân tích bằng Deep Learning</h3>
+      <div id="dlOn">
+        <div class="dl-row"><span>Xác suất lừa đảo (Char-CNN)</span><b id="dlPct"></b></div>
+        <div class="dl-bar"><i id="dlBar"></i></div>
+        <div class="engine" style="border:0;padding-top:6px;text-align:left">Mô hình CNN đọc từng ký tự của URL để tự học đặc trưng, không cần chọn thủ công.</div>
+      </div>
+      <div id="dlOff" class="hidden url">Mô hình Deep Learning chưa được nạp nên hệ thống đang dùng bộ luật. Hãy huấn luyện mô hình để kích hoạt.</div>
+      <div class="engine" id="engine"></div>
+    </div>
+
+    <div class="card" id="qrBox"><h3>Nội dung mã QR</h3><div class="url" id="qrText"></div></div>
+
+    <div class="card"><h3>Đích đến thực sự</h3><div class="url" id="finalUrl"></div><div class="url" id="chain" style="margin-top:6px"></div></div>
+
+    <div class="card"><h3>🔍 Các chỉ số trích xuất</h3><table id="indicators"></table></div>
+
+    <div class="card"><h3>⚠️ Dấu hiệu rủi ro phát hiện</h3><div id="reasons"></div></div>
+  </div>
+</div></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+const LABELS = { safe: "✅ AN TOÀN", suspicious: "⚠️ ĐÁNG NGHI", phishing: "🚨 NGUY HIỂM – LỪA ĐẢO" };
+
+function setTab(qr) {
+  $("tabUrl").classList.toggle("active", !qr); $("tabQr").classList.toggle("active", qr);
+  $("paneUrl").classList.toggle("hidden", qr); $("paneQr").classList.toggle("hidden", !qr);
+  $("err").textContent = "";
+}
+$("tabUrl").onclick = () => setTab(false);
+$("tabQr").onclick = () => setTab(true);
+
+function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+function render(d) {
+  $("err").textContent = "";
+  $("result").classList.remove("hidden");
+  $("banner").className = "banner " + d.verdict;
+  $("verdictText").textContent = LABELS[d.verdict];
+  $("riskPct").textContent = d.risk_score + "%";
+  $("riskBar").style.width = d.risk_score + "%";
+  $("riskSub").textContent = `Độ an toàn: ${100 - d.risk_score}%  ·  Điểm rủi ro: ${d.risk_score} / 100`;
+
+  $("dlOn").classList.toggle("hidden", !d.dl_active);
+  $("dlOff").classList.toggle("hidden", d.dl_active);
+  if (d.dl_active) {
+    $("dlPct").textContent = d.dl_prob + "%";
+    $("dlBar").style.width = d.dl_prob + "%";
+    $("dlBar").style.background = d.dl_prob >= 60 ? "var(--bad)" : d.dl_prob >= 30 ? "var(--warn)" : "var(--ok)";
+  }
+  $("engine").textContent = "Engine: " + d.engine;
+
+  $("finalUrl").textContent = d.final_url;
+  $("chain").innerHTML = d.chain.length > 1 ? "Chuỗi chuyển hướng:<br>" + d.chain.map(esc).join("<br>↳ ") : "";
+  $("qrBox").classList.toggle("hidden", !d.qr_content);
+  if (d.qr_content) $("qrText").textContent = d.qr_content;
+
+  $("indicators").innerHTML = d.indicators.map(r =>
+    `<tr><td>${esc(r.name)}</td><td><span class="dot ${r.status}"></span>${esc(r.value)}</td></tr>`).join("");
+  $("reasons").innerHTML = d.reasons.length
+    ? d.reasons.map(r => `<div class="reason"><span class="pts">+${r.points}</span><span>${esc(r.message)}</span></div>`).join("")
+    : "<div class='reason'>Không phát hiện dấu hiệu rủi ro.</div>";
+  $("result").scrollIntoView({ behavior: "smooth" });
+}
+
+async function call(btn, fn) {
+  const old = btn.textContent; btn.disabled = true; btn.textContent = "Đang phân tích...";
+  try {
+    const r = await fn(); const d = await r.json();
+    if (!r.ok) { $("err").textContent = d.error || "Có lỗi xảy ra"; } else render(d);
+  } catch (e) { $("err").textContent = "Không kết nối được máy chủ"; }
+  btn.disabled = false; btn.textContent = old;
+}
+
+$("scanBtn").onclick = () => {
+  const url = $("urlInput").value.trim();
+  if (!url) { $("err").textContent = "Hãy nhập URL"; return; }
+  call($("scanBtn"), () => fetch("/api/scan/", {
+    method: "POST", headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
+    body: JSON.stringify({ url })
+  }));
+};
+$("urlInput").addEventListener("keydown", e => { if (e.key === "Enter") $("scanBtn").click(); });
+
+$("qrBtn").onclick = () => {
+  const f = $("qrInput").files[0];
+  if (!f) { $("err").textContent = "Hãy chọn hoặc chụp ảnh mã QR"; return; }
+  const fd = new FormData(); fd.append("image", f);
+  call($("qrBtn"), () => fetch("/api/qr/", { method: "POST", headers: { "X-CSRFToken": csrf }, body: fd }));
+};
+</script>
+</body>
+</html>
